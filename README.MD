@@ -3,6 +3,8 @@
 **! 目前仅针对python版本区间[2.5]内的pyc格式**
 若需要解析其他版本pyc，需找出编译pyc文件的python版本对应的CPython源码中的Include/opcode.h文件，转成类似opcode_2_5.py文件，再进行解析
 
+**! Update for Python3.6**
+
 files:
 - demo.py是示例脚本。
 - pyc_generator.py是生成pyc文件的脚本

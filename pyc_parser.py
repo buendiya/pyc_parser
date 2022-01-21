@@ -3,6 +3,11 @@
 # Create Date: 2018-10-19 10:40
 # Author: Airlam
 
+"""
+https://stackoverflow.com/questions/32562163/how-can-i-understand-a-pyc-file-content
+Python/marshal.c
+"""
+
 import sys
 import time
 from lxml import etree
@@ -15,6 +20,13 @@ def r_long(f):
     m |= data[1] << 8
     m |= data[2] << 16
     m |= data[3] << 24
+    return m
+
+
+def r_short(f):
+    data = bytearray(f.read(2))
+    m = data[0]
+    m |= data[1] << 8
     return m
 
 
@@ -31,6 +43,16 @@ def r_long64(f):
     return m
 
 
+def r_type(f):
+    c = f.read(1)
+    return chr(c[0] & (~0x80))
+
+
+def r_int_one_byte(f):
+    c = f.read(1)
+    return c[0] & (~0x80)
+
+
 def r_str_raw_object(f, b=False):
     s = etree.Element("str")
 
@@ -39,7 +61,7 @@ def r_str_raw_object(f, b=False):
     if not b:
         s.set("value", f.read(length))
     else:
-        s.set("value", "".join(["\\x{:02x}".format(ord(c)) for c in f.read(length)]))
+        s.set("value", "".join(["\\x{:02x}".format(c) for c in f.read(length)]))
 
     return s
 
@@ -67,9 +89,42 @@ def r_str_ref_object(f):
     return r
 
 
+def r_short_ascii_object(f):
+    s = etree.Element("shortAscii")
+    length = r_int_one_byte(f)
+    s.set("length", str(length))
+    s.set("value", f.read(length))
+    return s
+
+
+def r_short_ascii_interned_object(f):
+    s = etree.Element("interndShortAscii")
+    length = r_int_one_byte(f)
+    s.set("length", str(length))
+    s.set("value", f.read(length))
+    return s
+
+
+def r_type_ref_object(f, tag="typeRef"):
+    e = etree.Element(tag)
+    type_ref = r_long(f)
+    e.set("typeRef", str(type_ref))
+    return e
+
+
 def r_tuple_object(f, tag="tuple"):
     t = etree.Element(tag)
     size = r_long(f)
+    while size > 0:
+        t.append(sr_object(f))
+        size -= 1
+    return t
+
+
+def r_small_tuple_object(f, tag="small_tuple"):
+    t = etree.Element(tag)
+    c = f.read(1)
+    size = int.from_bytes(c, byteorder='little', signed=False)
     while size > 0:
         t.append(sr_object(f))
         size -= 1
@@ -154,8 +209,8 @@ def r_code_object(f):
         return e
 
     def sr_str_object(f, tag=None, binary=False):
-        t = f.read(1)
-        assert t in ("s", "t", "R")
+        t = r_type(f)
+        assert t in ("s", "t", "R", "z", "r", "Z")
         if t == "s":
             s = r_str_raw_object(f, binary)
         else:
@@ -170,27 +225,25 @@ def r_code_object(f):
 
     code = etree.Element("codeObject")
     code.append(r_long_element(f, "argCount"))
+    code.append(r_long_element(f, "kwonlyargcount"))
     code.append(r_long_element(f, "nLocals"))
     code.append(r_long_element(f, "stackSize"))
     code.append(r_long_element(f, "flags"))
 
-    assert f.read(1) == 's'
+    assert r_type(f) == 's'
     code.append(r_code_code_object(f))
 
-    assert f.read(1) == '('
-    code.append(r_tuple_object(f, "consts"))
-
-    assert f.read(1) == '('
-    code.append(r_tuple_object(f, "names"))
-
-    assert f.read(1) == '('
-    code.append(r_tuple_object(f, "varNames"))
-
-    assert f.read(1) == '('
-    code.append(r_tuple_object(f, "freeVars"))
-
-    assert f.read(1) == '('
-    code.append(r_tuple_object(f, "cellVars"))
+    for attr in ["consts", "names", "varNames", "freeVars", "cellVars"]:
+        print(attr)
+        c_t = r_type(f)
+        if c_t == '(':
+            code.append(r_tuple_object(f, attr))
+        elif c_t == ')':
+            code.append(r_small_tuple_object(f, attr))
+        elif c_t == 'r':
+            code.append(r_type_ref_object(f, attr))
+        else:
+            raise Exception("type should be one of ['(',  ')', 'r']")
 
     code.append(sr_str_object(f, "fileName"))
     code.append(sr_str_object(f, "name"))
@@ -215,43 +268,67 @@ object_unmarshal_method_map = {
     "[": r_list_object,
     "{": r_dict_object,
     "0": r_null_object,
+    "z": r_short_ascii_object,
+    "Z": r_short_ascii_interned_object,
+    "r": r_type_ref_object,
 }
 
 
 def sr_object(f):
-    t = f.read(1)
+    t = r_type(f)
     if t in object_unmarshal_method_map:
         return object_unmarshal_method_map[t](f)
     else:
-        print "unknown object type: {}".format(t)
+        print("unknown object type: {}".format(t))
         assert 0
 
 
 def r_magic(f):
-    return "0x{:08x}".format(r_long(f))
+    return str(r_short(f))
 
 
 def r_time(f):
     return time.ctime(r_long(f))
 
 
+def r_source_size(f):
+    return str(r_long(f))
+
+
 def main(argv):
     if argv:
         pyc_file = argv[0]
     else:
-        pyc_file = "demo.pyc"
+        # pyc_file = "__pycache__/demo.cpython-37.pyc"
+        pyc_file = "/Users/buendiya/PycharmProjects/cpython-3.6/__pycache__/demo.cpython-36.pyc"
 
     xml_file = "{}.xml".format(pyc_file[:pyc_file.rfind('.')])
 
     root = etree.Element("PycFile")
-    with open(pyc_file, "rb") as f:
-        root.set("magic", r_magic(f))
-        root.set("time", r_time(f))
-        assert f.read(1) == 'c'
-        root.append(r_code_object(f))
+    try:
+        with open(pyc_file, "rb") as f:
+            root.set("magic", r_magic(f))
+            print("read ", f.read(2))
+            root.set("time", r_time(f))
+            root.set("source_size", r_source_size(f))
 
-    with open(xml_file, "w+") as of:
-        of.write(etree.tostring(root, pretty_print=True))
+            # for i in range(10000):
+            #     c = f.read(1)
+            #     if not c:
+            #         break
+            #     c_type = chr(c[0] & (~0x80))
+            #     print(c_type)
+            #     if c_type == 'c':
+            #         print(i)
+            #         break
+
+            assert r_type(f) == 'c'
+            root.append(r_code_object(f))
+    finally:
+        res = etree.tostring(root, pretty_print=True).decode()
+        print(res)
+        with open(xml_file, "w+") as of:
+            of.write(res)
 
     return 0
 
