@@ -193,36 +193,39 @@ def r_code_list(data, parent):
         parent.append(etree.Element("ins", value=ins_p))
 
 
+def r_long_element(f, tag):
+    v = r_long(f)
+    return etree.Element(tag, value="{}".format(v))
+
+
+def r_code_code_object(f):
+    e = etree.Element("code")
+    length = r_long(f)
+    data = bytearray(f.read(length))
+    e.append(etree.Element("raw", length=str(length), value="".join(["\\x{:02x}".format(c) for c in data])))
+    ins_list = etree.Element("insList")
+    e.append(ins_list)
+    r_code_list(data, ins_list)
+    return e
+
+
+def sr_str_object(f, tag=None, binary=False):
+    t = r_type(f)
+    assert t in ("s", "t", "R", "z", "r", "Z")
+    if t == "s":
+        s = r_str_raw_object(f, binary)
+    else:
+        s = object_unmarshal_method_map[t](f)
+
+    if tag:
+        wrap = etree.Element(tag)
+        wrap.append(s)
+        return wrap
+    else:
+        return s
+
+
 def r_code_object(f):
-    def r_long_element(f, tag):
-        v = r_long(f)
-        return etree.Element(tag, value="{}".format(v))
-
-    def r_code_code_object(f):
-        e = etree.Element("code")
-        length = r_long(f)
-        data = bytearray(f.read(length))
-        e.append(etree.Element("raw", length=str(length), value="".join(["\\x{:02x}".format(c) for c in data])))
-        ins_list = etree.Element("insList")
-        e.append(ins_list)
-        r_code_list(data, ins_list)
-        return e
-
-    def sr_str_object(f, tag=None, binary=False):
-        t = r_type(f)
-        assert t in ("s", "t", "R", "z", "r", "Z")
-        if t == "s":
-            s = r_str_raw_object(f, binary)
-        else:
-            s = object_unmarshal_method_map[t](f)
-
-        if tag:
-            wrap = etree.Element(tag)
-            wrap.append(s)
-            return wrap
-        else:
-            return s
-
     code = etree.Element("codeObject")
     code.append(r_long_element(f, "argCount"))
     code.append(r_long_element(f, "kwonlyargcount"))
