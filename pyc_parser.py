@@ -5,6 +5,7 @@
 
 """
 https://stackoverflow.com/questions/32562163/how-can-i-understand-a-pyc-file-content
+
 Python/marshal.c
 """
 
@@ -237,24 +238,14 @@ def r_code_object(f):
     code.append(r_code_code_object(f))
 
     for attr in ["consts", "names", "varNames", "freeVars", "cellVars"]:
-        print(attr)
         c_t = r_type(f)
-        if c_t == '(':
-            code.append(r_tuple_object(f, attr))
-        elif c_t == ')':
-            code.append(r_small_tuple_object(f, attr))
-        elif c_t == 'r':
-            code.append(r_type_ref_object(f, attr))
-        else:
-            raise Exception("type should be one of ['(',  ')', 'r']")
+        # print(attr, c_t)
+        code.append(object_unmarshal_method_map[c_t](f, attr))
 
     code.append(sr_str_object(f, "fileName"))
     code.append(sr_str_object(f, "name"))
-
     code.append(r_long_element(f, "firstLineNo"))
-
     code.append(sr_str_object(f, "lnotab", True))
-
     return code
 
 
@@ -262,6 +253,7 @@ object_unmarshal_method_map = {
     "N": r_none_object,
     "c": r_code_object,
     "(": r_tuple_object,
+    ")": r_small_tuple_object,
     "s": r_str_raw_object,
     "t": r_str_interned_object,
     "R": r_str_ref_object,
