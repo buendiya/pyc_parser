@@ -177,6 +177,7 @@ def r_long_object(f):
     return etree.Element("long", value=str(r_long(f)))
 
 
+# 解析的方法不正确，看 python37_dis.py 里的解析方法
 def r_code_list(data, parent):
     size = len(data)
     i = 0

@@ -1,9 +1,13 @@
+
+**! Update for Python3.6**
+
+解析 code 的方法不正确，看 python37_dis.py 里的解析方法.
+
 最近看陈儒的《Python源码剖析》一书，其中讲解pyc文件结构时，提到解析工具pycparser，网上没找到源码，所以自己动手写一个。
 
 **! 目前仅针对python版本区间[2.5]内的pyc格式**
 若需要解析其他版本pyc，需找出编译pyc文件的python版本对应的CPython源码中的Include/opcode.h文件，转成类似opcode_2_5.py文件，再进行解析
 
-**! Update for Python3.6**
 
 files:
 - demo.py是示例脚本。
